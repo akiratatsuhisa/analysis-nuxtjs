@@ -1,0 +1,138 @@
+import { jwtDecode } from 'jwt-decode';
+import _ from 'lodash';
+
+type ParseType = 'string' | 'number' | 'boolean' | 'object';
+
+export namespace Jwt {
+  export function getExpires(token?: string) {
+    if (!token) {
+      return null;
+    }
+
+    const payload = jwtDecode(token) as Record<string, unknown>;
+
+    if (!payload || !payload.exp) {
+      return null;
+    }
+
+    return new Date(Number(payload.exp) * 1000);
+  }
+
+  export function parseData(data: any, type?: ParseType) {
+    switch (type) {
+      case 'object': {
+        if (data instanceof Object) {
+          return data;
+        }
+        return null;
+      }
+      case 'boolean': {
+        if (data instanceof Boolean) {
+          return data;
+        }
+        if (/y|Y|yes|Yes|YES|true|True|TRUE|on|On|ON/g.test(data)) {
+          return true;
+        }
+        if (/n|N|no|No|NO|false|False|FALSE|off|Off|OFF/g.test(data)) {
+          return false;
+        }
+        return null;
+      }
+      case 'number': {
+        if (data instanceof Number) {
+          return data;
+        }
+        if (/^-?\d+\.?\d*$/g.test(data)) {
+          return Number(data);
+        }
+        return null;
+      }
+      case 'string':
+      default:
+        return String(data);
+    }
+  }
+
+  export function get(
+    payload: Record<string, any>,
+    name: string,
+    type?: ParseType,
+  ) {
+    const data =
+      payload[name] instanceof Array ? _.first(payload[name]) : payload[name];
+
+    if (_.isNil(data)) {
+      return null;
+    }
+
+    return parseData(data, type);
+  }
+
+  export function getAll(
+    payload: Record<string, any>,
+    name: string,
+    type?: ParseType,
+  ) {
+    const data =
+      payload[name] instanceof Array ? payload[name] : [payload[name]];
+
+    if (_.isNil(data)) {
+      return null;
+    }
+
+    return _.map(data, (value) => parseData(value, type));
+  }
+
+  export function parseUser(tokenOrPayload?: string | Record<string, unknown>) {
+    if (!tokenOrPayload) {
+      return null;
+    }
+
+    const payload =
+      typeof tokenOrPayload === 'string'
+        ? (jwtDecode(tokenOrPayload) as Record<string, unknown>)
+        : tokenOrPayload;
+
+    if (!payload) {
+      return null;
+    }
+
+    return {
+      id: get(payload, 'sub') as string | null,
+      username: get(payload, 'username') as string | null,
+      displayName: get(payload, 'displayName') as string | null,
+      email: get(payload, 'email') as string,
+      emailConfirmed: get(payload, 'emailConfirmed', 'boolean') as boolean,
+      firstName: get(payload, 'firstName') as string | null,
+      lastName: get(payload, 'lastName') as string | null,
+      permissions: getAll(payload, 'permissions') as Array<string>,
+      photoUrl: get(payload, 'photoUrl') as string | null,
+      coverUrl: get(payload, 'coverUrl') as string | null,
+    } as IdentityUser;
+  }
+
+  export function parseGoogleUser(token?: string) {
+    if (!token) {
+      return null;
+    }
+
+    const payload = jwtDecode(token) as Record<string, unknown>;
+
+    if (!payload) {
+      return null;
+    }
+
+    return {
+      id: get(payload, 'sub') as string | null,
+      username: get(payload, 'username') as string | null,
+      displayName: get(payload, 'name') as string | null,
+      email: get(payload, 'email') as string | null,
+      emailConfirmed: get(payload, 'email_verified', 'boolean') as
+        | boolean
+        | null,
+      firstName: get(payload, 'given_name') as string | null,
+      lastName: get(payload, 'family_name') as string | null,
+      photoUrl: get(payload, 'picture') as string | null,
+    };
+  }
+}
